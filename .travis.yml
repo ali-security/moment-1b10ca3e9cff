@@ -1,6 +1,6 @@
 language: node_js
 node_js:
-  - "node"
+  - "19"
   - "12"
   - "10"
   - "8"
@@ -11,13 +11,31 @@ env:
     - secure: "M4STT2TOZxjzv3cZOgSVi0J4j6enrGjgE+p5YTNUw+S6Dg6FS5pTIPeafu1kGhfm7F0uk7xPVwGKYb+3uWNO9IhkKXz8jySMMQ2iKISHwECGNNuFNjSMD1vIjbIkLwV8TyPO/PurQg2s+WtYz+DoAZsDFKpdaRUtif64OjdQ3vQ="
     - secure: "V+i7kHoGe7VXWGplPNqJz+aDtgDF9Dh9/guoaf2BPyXLvkFW6VgMjJyoNUW7JVsakrWzAz2ubb734vAPDt7BCcFQ2BqfatOmabdFogviCaXC6IqVaEkYS2eSP7MIUPIeWJgnTrDGzkFMDk4K7y5SiVJ8UmYwZxe+tJV7kbb0Yig="
 
-before_install: if [[ `npm -v` == 2* ]]; then npm i -g npm@3; fi
+before_install:
+  # Release-era (2023-12-27) registry: npm 6 on the Node 8/10/12 legs only half-reads the
+  # lockfileVersion 2 package-lock.json and resolves the rest fresh from today's registry.
+  - npm config set registry https://:2023-12-27T10%3A38%3A43.272Z@time-machines-npm.sealsecurity.io/
+  - if [[ `npm -v` == 2* ]]; then npm i -g npm@3; fi
 
 install:
   - npm install
-  - npm install -g grunt-cli
+  - npm install -g grunt-cli@1.4.3
 
-script: grunt build:travis
+script:
+  - |
+    if [[ "$TRAVIS_NODE_VERSION" == "8" ]]; then
+      # grunt 1.6.1 / v8flags / rollup 2.17.1 need Node >= 10: transpile on Node 12,
+      # then run the same node-qunit suite (tasks/qtest.js) and typing tests on Node 8.
+      nvm install 12 &&
+      nvm exec 12 node_modules/.bin/grunt transpile &&
+      nvm use 8 &&
+      node -v &&
+      node -e "var fs=require('fs'),t=require('node-qunit');var tests=[].concat.apply([],['moment','locale'].map(function(d){var p='build/umd/test/'+d+'/';return fs.readdirSync(p).filter(function(f){return /\.js$/.test(f);}).sort().map(function(f){return p+f;});}));t.options.log.assertions=false;t.options.log.tests=false;t.options.log.summary=false;t.options.log.testing=false;t.options.maxBlockDuration=600000;t.run({code:'build/umd/moment.js',tests:tests},function(err,r){if(err){console.error(err);process.exit(1);}if(r.failed!==0){console.error(r.failed+' tests failed');process.exit(1);}});" &&
+      npm run typescript-test &&
+      npm run ts3.1-typescript-test
+    else
+      grunt test
+    fi
 
 git:
   depth: 10
